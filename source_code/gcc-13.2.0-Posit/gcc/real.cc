@@ -2958,10 +2958,10 @@ real_hash (const REAL_VALUE_TYPE *r)
 
   return h;
 }
-
-
 
 /* Posit-number format */
+
+//將posit的regime&exp轉回real_value的exp
 inline void posit_set_real_exp(REAL_VALUE_TYPE *r,unsigned long es,unsigned long regime,unsigned long exp){
   int regimeExp=1;
   //依照es推算1 regBit 是多少 exp
@@ -2976,7 +2976,7 @@ inline void posit_set_real_exp(REAL_VALUE_TYPE *r,unsigned long es,unsigned long
   //因此=> 2^(z-1) * 2 * [0.5,1) = 2^(z-1) * [1,2) 藉此 z 可以轉為 x和y 而 [1,2) 部分可以沿用
   //=>上述為real_value轉posit,在此要轉換回去所以實際exp會比算出的再+1
 
-  SET_REAL_EXP(r,exp + 1); //由於 why +1 -> real_value range at 0.5~1 posit is 1 ~ 2 so 2* (0.5~1) = 1~ 2
+  SET_REAL_EXP(r,exp + 1); //posit (1,2] range , real_value range [0.5~1),  [1,2) = 2*[0.5,1) 所以 exp"+1"
 
 }
 
@@ -2984,39 +2984,42 @@ inline void posit_set_real_exp(REAL_VALUE_TYPE *r,unsigned long es,unsigned long
 static void encode_posit32(const struct real_format * , long * , const REAL_VALUE_TYPE *);
 static void decode_posit32(const struct real_format * , REAL_VALUE_TYPE * , const long *);
 
-//reg [0,31]bits
-//frac [0,27]bits
+
 
 static void encode_posit32(const struct real_format *fmt, long *buf, const REAL_VALUE_TYPE *r){
-  //  Real_EXP = 做 uexp(以有號方式記錄 MSB為sign bit) 不定bits轉成int型別 的對齊 ,但為何要最後 -1 尚不清楚 ->以解  可以看draw.io
   
-  //  image => output
-  //  regLength => regime (k)長度 [k=m-1]
-  //  regime => posit 要的實際 regime 數值 / 2進
+  //reg [0,31]bits
+  //frac [0,27]bits
+  
   //  exp => 實際exp值 (int)
-  //  sig for 紀錄 real number 的 fraction / 2進 ,r->sig是向左對其
-  //  frac 實際 posit 要用的 fraction 值 / 2 進
-  //  bitPlusOne es第的n+1個bit 用於歸納精度不到的數值
-  //  bitMore    es第的n+2個bit 用於歸納精度不到的數值
-  //  real Format 的uexp本身沒有做額外位移運算
-
-  printf("posit32 encode test\n");
-  // bits
+  
+  //bits
+  //  image 結合sign|regime|exp|frac的最終值
+  //  sig   紀錄REAL_VALUE_TYPE的significant | 2進 | r->sig是向左對齊
+  //  regime  posit format的regime | 2進制
+  //  frac    posit format的fraction值 | 2進制
   unsigned long image, sig, regime, frac=0;
-  // sign bit
+
+  //posit format 的 sign bit 
   unsigned long sign = r->sign;
-  // 
+
+  //  regimeBitsLength
+  //  regLength regime (k)長度 [k=m-1]
   unsigned long regLength;
   
   int fracLength, exp;
 
+  //  bitPlusOne 溢位的第1個bit,用於歸納精度不到的數值 |可能是exp或fraction
+  //  bitMore    溢位的第1個bit後其他bits,用於歸納精度不到的數值 |可能是exp或fraction
   bool bitNPlusOne = 0, bitsMore = 0;
   
-  //image初始化為0
+  //image 初始化
   image = 0x0;
   
-  //sig 預設是向左對齊,為方便使用改為向右對齊,並且real_value的significant會包含posit_fraction隱含表達的hidden bit,因此sig的MSB捨棄
-  sig = (r->sig[SIGSZ - 1] >> (HOST_BITS_PER_LONG - 29)) & 0xfffffff; //debug::去除最前方代表1.F 的1所以先取29位再取28位 那為何不直接後28為就好? -> &運算從後方開始  因而保留最前方的1 bit
+  //r->sig為real_value的significant,原先是向左對齊,為了後續結合方便,此處改為向右對齊
+  //posit(32,2)最多有28 bits fraction
+  //real_value的significant會包含posit_fraction隱含表達的hidden bit在MSB(posit fraction 1.x的1),因此sig的MSB捨棄(位移29位在抓28位的原因)
+  sig = (r->sig[SIGSZ - 1] >> (HOST_BITS_PER_LONG - 29)) & 0xfffffff; 
   
   //real_value本身的case判斷,若沒滿足特殊情況才會進行一般運算(rvc_normal)
   switch (r->cl)
@@ -3036,7 +3039,7 @@ static void encode_posit32(const struct real_format *fmt, long *buf, const REAL_
     case rvc_normal:
       /* Recall that IEEE numbers are interpreted as 1.F x 2**exp,
       whereas the intermediate representation is 0.F x 2**exp.
-      Which means we're off by one.  */
+      Which means we're off by one. */
       //in out Posit version, it also have hidden 1 in significand part(1.F)
       if (real_isdenormal(r))
       { //denormal IEEE single must be smaller than smallest posit_32 with es=2 value
@@ -3047,56 +3050,50 @@ static void encode_posit32(const struct real_format *fmt, long *buf, const REAL_
         break;
       }
       else {
+        
+        // REAL_EXP(r)-1 => "-1"的原因 = REAL_VALUE_TYPE 的 significant 表達範圍是[0.5,1) 而posit 的 fraction 是 [1,2)
+        // 所以significant轉成fraction只需要*2,此*2從exp拿,因此exp要額外-1
+        // [0.5,1)*2^(exp) = [0.5,1)*2 * 2^(exp-1) = [1,2) * 2^(exp-1)
         exp = REAL_EXP(r) - 1;
       }
-      
-      //測試除錯用
-      fprintf(stderr,"exp = %d\n", exp);
 
-      //特殊值&邊界判定，但real_value本身已經帶有判定，可能會廢除
-      if (exp >= 120 && sign == 0)
-      {
+      //特殊值&邊界判定，但real_value本身已經帶有判定,測試後可能可以廢除(僅留下else部份)
+      if (exp >= 120 && sign == 0){
         image = 0x7FFFFFFF; // maxpos
       }
-      else if (exp >= 120 && sign == 1)
-      {
+      else if (exp >= 120 && sign == 1){
         image = 0x80000001; //-maxpos
       }
-      else if (exp <= -120 && sign == 0)
-      {
+      else if (exp <= -120 && sign == 0){
         image = 0x1; // minpos
       }
-      else if (exp <= -120 && sign == 1)
-      {
+      else if (exp <= -120 && sign == 1){
         image = 0xFFFFFFFF; //-minpos
       }
-      else if (sign == 0 && exp == 0 && sig == 0)
-      {
+      else if (sign == 0 && exp == 0 && sig == 0){
         //fprintf(stderr,"posit = 1\n");
         image = 0x40000000; // 1
       }
-      else if (sign == 1 && exp == 0 && sig == 0)
-      {
+      else if (sign == 1 && exp == 0 && sig == 0){
         image = 0xC0000000; //-1
       }
-      else{
+      else{ 
         
-        // exp >=0 時 regime計算
+        //exp >=0 時將exp轉成regime
         if(exp>=0){
           regLength = 1;
-          while (exp >= 4)
+          while (exp >= 4) //將exp換成regime bits數量(regimeLength)
           {
             exp -= 4; // f32/=16;
             ++regLength;
           }
-          // 最後 << 1 for endBit
+          //將1 << regLength 後-1,可以得到regLength個1,最後 << 1 生成regime的endBit
           regime = (((unsigned long)1 << regLength) - 1) << 1;
-
         }
         else{
-          //exp<0 regime計算
+          //exp<0 時將exp轉成regime,將exp轉換,直到exp>=0
           regLength = 0;
-          while(exp<0){
+          while(exp<0){ //將exp換成regime bits數量(regimeLength)
             exp += 4;
             ++regLength;
           }
@@ -3105,22 +3102,28 @@ static void encode_posit32(const struct real_format *fmt, long *buf, const REAL_
           regime = 0x1;
         }
 
-        //將regime移到正確位置 (32 - (1+ regLength +1)) [1+ regLength +1 , 左1 for signBits 右1for EndBit] => 30 - regLength
-        regime <<= (30 - regLength );
+        //將regime移到正確位置 (32-(1+regLength+1)) [1+regLength+1,左1(1+)保留sign bit位置 右1(+1)保留endBits位置] 
+        //簡化後:30 - regLength
+        regime <<= (30 - regLength);
 
+        //fraction bits 在posit(32,2)中最多28 bits
         fracLength = 28 - regLength;
         
+
+        //根據fractionLength長度做溢位部份的處理
+        //fraction<0,bitNPlusOne在exp
         if (fracLength < 0){
           //in both cases, reg=29 and 30, e is n+1 bit and frac are sticky bits
           if (regLength == 29){
             bitNPlusOne = exp & 0x1;
             exp >>= 1; //taken care of by the pack algo
           }
-          else{ //reg=30
+          else{ //regLength=30 es 2bit皆溢出 
             bitNPlusOne = exp >> 1;
             bitsMore = exp & 0x1;
             exp = 0;
           }
+          //fraction全部溢位,只要fraction有數值都算有bitsMore
           if (sig != 0){ //because of hidden bit
             bitsMore = 1;
             frac = 0;
@@ -3128,26 +3131,35 @@ static void encode_posit32(const struct real_format *fmt, long *buf, const REAL_
         }
         else
         {
+          //拿取需要的bits
           frac = sig >> (28 - fracLength);
-          //要取得當posit為n+1 bits時,第n+1 bit的數值 , HOST_BITS_PER_LONG - 2 - fracLength[-2, 1 for hidden bit , 1 for target]
+          
+          //bitNPlusOne 取未使用到的sig首位
+          //由於sig前面只取28bits,會有溢位發生在28bits後,因此回頭抓r->sig[SIGSZ-1]
+          //"HOST_BITS_PER_LONG - 2 - fracLength":"-2",1 bit for hidden bit ,1 bit for our target bitNPlusOne]
           bitNPlusOne = (r->sig[SIGSZ - 1] >> (HOST_BITS_PER_LONG - 2 - fracLength)) & 1; 
-          //查看第n+1 bit後是否還有數值,若有則歸納在bitsMore
-          if ((r->sig[SIGSZ - 1] & (((unsigned long)1 << (HOST_BITS_PER_LONG -2 - fracLength)) - 1)) > 0) //debug 到上面bitNPlustOne的交界處-1後即可得全1由bitN+1處到尾端的所有bits狀態 如果有人不是零則無條件進位到bitMore(n+2)
+          
+          //查看r->sig在n+1後方是否還有其他溢位的bit,若有則歸納在bitsMore
+          //將1左位移上面的bitNPlustOne運算後在額外-1,即可得到bitsMore的檢測範圍,透過跟r->sig做&運算得到剩餘bits的狀態,如果有bits不是零則bitsMore設為1
+          if ((r->sig[SIGSZ - 1] & (((unsigned long)1 << (HOST_BITS_PER_LONG -2 - fracLength)) - 1)) > 0)
             bitsMore = 1;
           else
             bitsMore = 0;
         }
 
-        if (regLength < 28){ //將exp位移到正確位置. 若regLength等同或大於28,則exp已在正確位置或不佔任何bit因此不須移動
+        //將exp位移到正確位置,若regLength>=28,則exp已在正確位置或不佔任何bit因此不須移動
+        if (regLength < 28){
           exp <<= (28 - regLength);
         }
 
-        //合併
+        //合併bits
         image = regime | exp | frac;
         
-        //rounding off fraction bits 最早有做極端值檢測，因此必定最大值=maxpos-1 , -maxpos+1,不必擔心捨入後overflow
+        //rounding off fraction bits
+        //函式開頭有做極端值檢測,因此捨入前極值為(+-)maxpos-1,不必擔心捨入後overflow
         image += (bitNPlusOne & (image & 1)) | (bitNPlusOne & bitsMore);
         
+        //負數做二補數運算即可獲得
         if (sign == 1)
           image = (-image) & 0xffffffff;
 
@@ -3164,34 +3176,47 @@ static void encode_posit32(const struct real_format *fmt, long *buf, const REAL_
 
 static void decode_posit32(const struct real_format *fmt , REAL_VALUE_TYPE *r , const long *buf){
 
-  //從buf拿出數值，並確保只使用32bits
+  //參考decode_ieee_single及enocde_posit32
+  //基本上是把encode_posit32反著做
+  //從image拿出數值,並確保只使用32bits
   unsigned long image = buf[0] & 0xffffffff;
-  //拿取sign bit
+  //拿出sign bit
   bool sign = (image >> 31) & 1;
   
-  //先轉回正數，來方便做運算
+  //若是負數則先轉回正數
   if(sign){
     image = (-image) & 0xffffffff;
   }
 
-  // 由於當前版本沒有對regLength做長度紀錄，做decode時需要現場推算
-  // regimeFirstBit  for get first regime bit
-  // regLength for 取得做encode時的regLength
+  // 
+  // 架構上沒有對一個posit32的變數做regLength的紀錄,做decode時需要即時推算
+  // regimeFirstBit  取得regime中的首個bit,用來推斷指數是正數(或零)or負數
+  // regLength 紀錄推算出的regime長度
   unsigned long regimeFirstBit = (image>>30) & 1 ;
-  unsigned long regLength=1 ,fracLength=0 ,es=2 ;
+  unsigned long regLength=1; 
+  
+  //fractionLength 紀錄image中fraction的長度
+  //es:posit(32,es),預設為2
+  unsigned long fracLength=0 ,es=2 ;
   
   //get regimeLength
-  //由regimeFirsBit後方(第30bit),開始檢查是否跟regimeFirstBit同值(皆為0或1),若不同值代表碰到endBit(或是到邊界了),若相同則把regLength+1
+  //由regimeFirsBit後方,(右邊數來第30bit)開始檢查是否跟regimeFirstBit同值(皆為0或1),若不同值代表碰到regime的endBit(或是到邊界了)
   for(int offset=29;offset>=0;--offset){
-    if(regimeFirstBit^((image>>offset) & 0x1)){
+    
+    //若相同則把regLength+1,相反(endbit)或到邊界時停止
+    if(regimeFirstBit^((image>>offset) & 0x1))//取比對目標bit後與regimeFirstBit做xor運算比對
+    {
+      //true時表示比對目標為endBit,結束推算
       break;
     }
-    else{
+    else 
+    {
+      //false表示與firstBit相同,將regLength長度+1
       ++regLength;
     }
   }
 
-  //get regime's exp
+  //get regime's exp,取得regime代表的指數值
   //當regBits為連續k個1,實際regime = k-1;
   //當regBits為連續k個0,實際regime =  -k;
   int reg=0;
@@ -3206,29 +3231,40 @@ static void decode_posit32(const struct real_format *fmt , REAL_VALUE_TYPE *r , 
   fracLength= 28 - regLength;
   
   //get exp & fraction
-  int exp=0;
-  if(fracLength<0){
-    //只有1bit exp時
-    if(regLength == 29){
+  int exp=0
+  
+  //當fracLength<0,沒有fraction
+  if(fracLength<0)
+  {
+    //regLength==29,變數只有1bit exp,讀取該bit
+    if(regLength == 29)
+    {
       exp = image & 0x1;
     }
-    else{ //regLength >=30
+    else //regLength >=30,沒有exp bits
+    {
       exp = 0;
     }
   }
-  else{
-    //從image濾掉frac後抓出exp
+  else
+  {
+    //從image濾掉frac bits後抓出exp, &0x3:預設es=2 抓2bits
     exp = (image >> (fracLength)) & 0x3;
     
     //image become fractionBit  for realValue // other 1 bit for real_value of extra hidden bit (1.f)
+    //將image位移到只剩fractionBits,額外-1:1 bit保留給real_value的siginficant固定存在的0.5,會在下面補上
     image <<= (HOST_BITS_PER_LONG - fracLength - 1);
+    //確保首位保留
     image &= ~SIG_MSB;
   }
 
+  //REAL_VALUE_TYPE初始化
   memset (r, 0, sizeof (*r));
   
-  //inf to quiet nan & zero
-  if(regLength == 31 && regimeFirstBit == 0 && sign==1 && fmt->has_inf){
+  //例外處理:naR to quiet nan & zero
+  if(regLength == 31 && regimeFirstBit == 0 && sign==1 && fmt->has_inf)
+  {
+    //naR to quiet nan
     r->cl = rvc_nan;
     r->sign = sign;
     r->signalling = 0;
@@ -3237,25 +3273,29 @@ static void decode_posit32(const struct real_format *fmt , REAL_VALUE_TYPE *r , 
     }
     r->sig[SIGSZ-1] = image;
   }
-  else if(regLength == 31 && regimeFirstBit == 0 && sign == 0){
+  else if(regLength == 31 && regimeFirstBit == 0 && sign == 0)
+  {
+    //數值0
     r->cl = rvc_zero;
     r->sign = 0;
   }
-  else{
+  else
+  {
     r->cl = rvc_normal;
     r->sign = sign;
     
-    //將regimeBits和expBits轉換回real_value's exp,詳細請跳轉至函式
+    //將上方posit的regimeBits和expBits轉換回real_value_type's exp,會順便考慮到real_value_type的significant與posit的fraction範圍問題,詳細請跳轉至函式
     posit_set_real_exp(r,2,reg,exp);
     
-    //正常下real_value 的MSB 必為1 ,其值範圍為[0.5,1)
+    //正常下real_value_type的MSB 必為1 ,significant其值範圍為[0.5,1)
     r->sig[SIGSZ-1] = SIG_MSB;
-    if(fracLength>=0){
-      //雖然直接從image拷貝回r,但值意義會從[1,2)變回[0.5,1)
+    
+    //如果posit(32,2)變數有fraction,將上面處理完的fraction放入r->sig
+    if(fracLength>=0)
+    {
       r->sig[SIGSZ-1] |= image;
     }
   }
-
 
 }
 

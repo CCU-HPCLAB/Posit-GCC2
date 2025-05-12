@@ -26,24 +26,17 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#include "soft-fp.h"
-#include "single.h"
+#include "SoftPosit-master/internals.h"
+#include "SoftPosit-master/platform.h"
+#include <stdio.h>
 
 SFtype
 __mulsf3 (SFtype a, SFtype b)
 {
-  FP_DECL_EX;
-  FP_DECL_S (A);
-  FP_DECL_S (B);
-  FP_DECL_S (R);
-  SFtype r;
+  posit32_t r;
 
-  FP_INIT_ROUNDMODE;
-  FP_UNPACK_S (A, a);
-  FP_UNPACK_S (B, b);
-  FP_MUL_S (R, A, B);
-  FP_PACK_S (r, R);
-  FP_HANDLE_EXCEPTIONS;
+  r = p32_mul(*(posit32_t*)&a, *(posit32_t*)&b);
+  printf("mulsf3\n");
+  return *((SFtype*)&r);
 
-  return r;
 }
