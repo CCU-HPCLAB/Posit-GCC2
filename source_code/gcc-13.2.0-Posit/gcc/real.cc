@@ -2970,21 +2970,17 @@ inline void posit_set_real_exp(REAL_VALUE_TYPE *r,unsigned long es,unsigned long
   }
   //將regime轉換回並加回exp
   exp+=regimeExp*regime;
-  //呼叫real.h內的Marco把exp放入r
-
-  //由於posit 是 (2^(2^x) * 2^y) * { (2^x)* [1,2) } ,而real_value的格式是 2^z * [0.5,1) ,但 fraction 部分會剛好差2倍
-  //因此=> 2^(z-1) * 2 * [0.5,1) = 2^(z-1) * [1,2) 藉此 z 可以轉為 x和y 而 [1,2) 部分可以沿用
-  //=>上述為real_value轉posit,在此要轉換回去所以實際exp會比算出的再+1
-
-  SET_REAL_EXP(r,exp + 1); //posit (1,2] range , real_value range [0.5~1),  [1,2) = 2*[0.5,1) 所以 exp"+1"
-
+  
+  //  SET_REAL_EXP(r,"exp+1"),"exp+1"的原因:posit 的 fraction 是 [1,2) 而 REAL_VALUE_TYPE 的 significant 表達範圍是[0.5,1)   
+  //  所以fraction轉回significant需要/2,因此算式概念可以變成如下
+  //    [1,2)*(2^exp) = (([1,2)/2)*2)*(2^exp) = [0.5,1)*(2*(2^exp)) = [0.5,1)*(2^(exp+1))
+  //  呼叫real.h內的Marco把exp放入r
+  SET_REAL_EXP(r,exp + 1);
 }
 
 //posit32 declaration&defined
 static void encode_posit32(const struct real_format * , long * , const REAL_VALUE_TYPE *);
 static void decode_posit32(const struct real_format * , REAL_VALUE_TYPE * , const long *);
-
-
 
 static void encode_posit32(const struct real_format *fmt, long *buf, const REAL_VALUE_TYPE *r){
   
