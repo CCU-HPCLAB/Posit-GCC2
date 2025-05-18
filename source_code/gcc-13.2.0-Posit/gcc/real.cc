@@ -3190,7 +3190,7 @@ static void decode_posit32(const struct real_format *fmt , REAL_VALUE_TYPE *r , 
   // 
   // 架構上沒有對一個posit32的變數做regLength的紀錄,做decode時需要即時推算
   // regimeFirstBit  取得regime中的首個bit,用來推斷指數是正數(或零)or負數
-  // regLength 紀錄推算出的regime長度
+  // regLength 紀錄推算出的regime長度(不含零)
   unsigned long regimeFirstBit = (image>>30) & 1 ;
   unsigned long regLength=1; 
   
@@ -3417,7 +3417,7 @@ static void encode_posit64_2(const struct real_format *fmt , long *buf , const R
       
       fprintf(stderr,"exp=%d\n",exp);
 
-      //exp極值 [-186,186] ((2^4)^62)
+      //exp極值 [-248,248] ((2^4)^62)
       //0x0123456701234567
       if (exp >= 248 && sign == 0){
         image_hi = 0x7FFFFFFF;
@@ -3676,7 +3676,8 @@ if(!fposit){
     
     //抓取r的significant
     //抓取後方的32bits放到sig_lo
-    //關於:>>31>>1,疑似是以前位移超過31bits會有問題,所以才會>>31>>1
+    //關於:>>31>>1,疑似是以前位移超過31bits會有位定義行為,所以才會>>31>>1
+    //參考:https://stackoverflow.com/questions/7401888/why-doesnt-left-bit-shift-for-32-bit-integers-work-as-expected-when-used
     //抓取剩餘bits放到sig_hi
     
     sig_hi = r->sig[SIGSZ -1];
@@ -4148,7 +4149,7 @@ static void decode_posit64_2(const struct real_format *fmt ,REAL_VALUE_TYPE *r ,
       r->sig[SIGSZ-2] = image_lo;
     }
     else{
-      //若對32bits做32bits或以上的位元位移是未定義行為:
+      //若對32bits做32bits或以上的位元位移有可能是未定義行為:
       //參考,https://stackoverflow.com/questions/7401888/why-doesnt-left-bit-shift-for-32-bit-integers-work-as-expected-when-used
       r->sig[SIGSZ-1] = (image_hi <<31 <<1) | image_lo | SIG_MSB;
     }
@@ -4158,7 +4159,7 @@ static void decode_posit64_2(const struct real_format *fmt ,REAL_VALUE_TYPE *r ,
 }
 
 static void decode_posit64(const struct real_format *fmt ,REAL_VALUE_TYPE *r , const long *buf){
-if(!fposit){
+if(!fposit){ //<=最早事先做posit(64,3),後續才做posit(64,2),使用
 
   //基本上是把encode_posit64反著做,過程順序可能會有些差異
 
@@ -4181,19 +4182,24 @@ if(!fposit){
   image_hi &= 0xffffffff;
   image_lo &= 0xffffffff;
 
-  //sign bit 
+  //sign bit
   bool sign = (image_hi >> 31) & 1;
   
-  //bits reverse for caculate
+  //若是負數,則先轉正以方便後續計算
   if(sign){
     posit64Reverse(image_hi,image_lo);
   }
 
-  //get regLength
+  // 架構上沒有對一個posit64的變數做regLength的紀錄,做decode時需要即時推算
+  // regimeFirstBit  取得regime中的首個bit,用來推斷指數是正數(或零)or負數
+  // regLength 紀錄推算出的regime長度(不含零)
   unsigned long regimeFirstBit = (image_hi >> 30) & 1;
   regLength = 1;
   
   int offset=29;
+  
+  //64bits可能有跨變數紀錄的問題,所以要分兩段(hi,lo)檢查
+  //由regimeFirsBit後方,(右邊數來第30bit)開始檢查是否跟regimeFirstBit同值(皆為0或1),若不同值代表碰到regime的endBit(或是到邊界了)
   //image_hi regLength
   while(offset >=0){
     if(regimeFirstBit ^ ((image_hi>>offset) & 0x1) ){
@@ -4205,7 +4211,11 @@ if(!fposit){
     --offset;
   }
 
-  //image_lo regLength
+  //當offset==-1時:
+  //代表image_hi查找完都沒看到endBit,因此接下來繼續從image_lo計算regime長度(直到看到endBit or 邊界)
+
+  //若offset!=-1:
+  //已經在image_hi看到endBit,不必在看image_lo
   if(offset == -1){
     offset = 31 ;
     while(offset >=0){
@@ -4219,7 +4229,8 @@ if(!fposit){
     }
   }
 
-  //get regime's exp
+  //前面已經知道整個regime的長度了,就可以知道regime的指數
+  //reg:用於紀錄regime的指數=>(2^(2^es))^reg
   int reg=0;
   if(regimeFirstBit==1){
     reg=regLength-1;
@@ -4228,58 +4239,85 @@ if(!fposit){
     reg=-regLength;
   }
 
+  //前面已經獲得regime的長度,這裡就可以推算fraction的長度
   //get fracLength
   fracLength = 59 - regLength ;
-  //get exp
+  
+  
+  
+  //已經知道regime長度,也就可以知道exponent部份
+  //get exp,exp初始化
   int exp = 0;
+  //根據regLength,exp bits可以會有儲存在不同變數中(hi,lo)或溢位而紀錄不完整的狀況
+  
+  //regLength<=59:exp bits沒有溢位,但可能會儲存在不同變數中(hi,lo)
   if(regLength <= 59){
     
+    if(regLength<=27){ //exp bits all at image_hi 
     
-    if(regLength<=27){ //exp all at image_hi //regLength + 2 ,1 for regEndBit ,1 for signBit
+      //regLength + 2:1 for regEndBit ,1 for signBit
+      //移除sign,regime bits後取出3 bits的exp bits
       exp = ((image_hi << (regLength + 2)) >> 29) & 0x7;
     }
-    else if(regLength >=30){ // exp all at image_lo
+    else if(regLength >=30){ // exp bits all at image_lo
+      //右位移掉fraction bits, 3 exp bits 就會直接在最尾端
       exp = (image_lo >> fracLength) & 0x7;
     }
-    else{
-      if(regLength == 28){ //hi 2 bits , lo 1 bit
+    else{ //exp剛好卡在image_hi尾端與image_lo開頭,須從兩邊拼回完整3 exp bits
+      
+      if(regLength == 28){ //image_hi 2 bits ,image_lo 1 bit
         exp = (((image_hi & 0x3) << 1) | ((image_lo >> 31) & 0x1));
       }
-      else if(regLength ==29){ // hi 1 bit , lo 2 bits
+      else if(regLength ==29){ //image_hi 1 bit ,image_lo 2 bits
         exp = (((image_hi & 0x1) << 2) | ((image_lo >> 30) & 0x3));
       }
     } 
   }
-  else{
-    // exp overflow 1 bit
-    if(regLength ==60){
+  else{ //exp bits 溢位,並非完整3 bits exp
+    
+    if(regLength ==60){ // exp overflow 1 bit,only get 2 bits
       exp = image_lo & 0x3;
     } 
-    else if(regLength == 61){ // exp overflow 2 bit
+    else if(regLength == 61){ // exp overflow 2 bit,only get 1 bits
       exp = image_lo & 0x1;
     }
-    else{ //no bit for exp ,regLength == 62 or 63
+    else{ //no bits for exp ,regLength == 62 or 63
       exp = 0;
     }
   }
   
-  //get frac & set image as sig(並使其由向右對齊改為向左對齊), 1+fracLength[1 for hidden bit]
-  if(fracLength>31){ //>=32,會額外需要1bit空間放hidden bit所以是>31 而不是>32, frac 有使用到 image_hi 或剛好沒用到
-    //1+fracLength-32 , 1+fracLength=> 獲得預計總長度 , -32=>取得在image_hi 的frac長度
+  //get frac & set image as sig(並使其由向右對齊改為向左對齊),1+fracLength[1 for hidden bit]
+  //將image_hi與image_lo來表示r->sig[]
+
+  //>31而不是>32:REAL_VALUE_TYPE的significant會額外需要1bit空間放posit中fraction隱含表達的hidden bit所以需要預留1bit,
+  //  因此只要>31 bits就需要把剩餘的放到image_lo,而不是>32,此情況下fraction有可能剛好沒用到image_hi(fractionLength==31)
+  if(fracLength>31){ //fraction 儲存同時用到(image_hi,image_lo),需要從兩邊抓fraction bits
+    //1+fracLength-32:
+    //  1+fracLength:image_hi最前方要保留的1bit,
+    //  -32:fraction必定>32bits才會跑到image_hi,因此-32取得在image_hi的fraction長度,
+    //  計算完後得到保留1 bit空間後"需要移到image_hi"或"留在image_lo"的fraction bits
     image_hi = (image_hi << (32 - (1+fracLength - 32))) | (image_lo >> ((1+fracLength - 32)));
     image_lo <<= (32 - (1+fracLength - 32) );
   }
-  else{ //<=31 , 只使用到image_lo 因此直接將image_lo內容向左對齊後傅值給image_hi
+  else{ 
+    //<=31:fraction只使用到image_lo並且不會因為額外保留1bit而有影響,可以直接將image_lo的fraction預留最前方1bit空間後(左位移運算中再-1的原因),再向左對齊後image_hi
     image_hi = image_lo << (32 - fracLength - 1 );
     image_lo = 0;
   }
   
-  image_hi &= 0x7fffffff; //hidden bit 先固定為0,後續合併時加入
+  //確保只有32 bits 
+  image_hi &= 0x7fffffff; //hidden bit 順便先設為0,最後合併時會再加入
   image_lo &= 0xffffffff;
 
+  //將r初始化
   memset (r, 0, sizeof(*r));
   
-  //inf to nan 判斷
+
+  //這邊處理參考decode_ieee_double
+  //以及wiki上關於nan的處理:https://en.wikipedia.org/wiki/NaN
+  
+  //NaR to nan 判斷
+  //fmt->has_inf:正確來說posit是只有NaR這一種例外狀況,但由於real_format裡沒有has_NaR,因此是當作has_inf,但或許has_NaN更能表達posit有NaR的意思?
   if(regLength == 63 && regimeFirstBit == 0 && sign == 1 && fmt->has_inf){
     r->cl = rvc_nan;
     r->sign = sign;
@@ -4289,30 +4327,36 @@ if(!fposit){
       image_hi |= 0x40000000;
     }
 
+    //long是 32 bits or 64 bits狀況分別處理
     if(HOST_BITS_PER_LONG == 32){ 
-      r->sig[SIGSZ-1] = image_hi; //all 0
-      r->sig[SIGSZ-2] = image_lo; //all 0
+      r->sig[SIGSZ-1] = image_hi;
+      r->sig[SIGSZ-2] = image_lo;
     }
     else{
-      r->sig[SIGSZ-1] = ( image_hi <<31 <<1) | image_lo ; //all 0
+      r->sig[SIGSZ-1] = ( image_hi <<31 <<1) | image_lo ;
     }
   }
-  else if(regLength == 63 && regimeFirstBit == 0 && sign == 0){ //就是 0
+  else if(regLength == 63 && regimeFirstBit == 0 && sign == 0){ //posit(64,es)==0,就是0
     r->cl = rvc_zero;
     r->sign = 0;
   }
-  else{
+  else{ //正常的情況
+    
+    //將前面計算的東西全部合併
     r->cl = rvc_normal;
     r->sign = sign ;
     posit_set_real_exp(r,3,reg,exp);//設定r的exp,詳細可跳轉至函式區塊觀看
 
-    if(HOST_BITS_PER_LONG == 32){ //填入sig,[並附上SIG_MSB]
+    //long是 32 bits or 64 bits狀況分別處理
+    if(HOST_BITS_PER_LONG == 32){ 
+      //將image填入sig,[並附加上SIG_MSB]
       r->sig[SIGSZ-1] = image_hi | SIG_MSB;
       r->sig[SIGSZ-2] = image_lo;
     }
-    else{
+    else{ //64bits
+      
       //若對32bits做32bits或以上的位元位移是未定義行為:
-      //參考,https://stackoverflow.com/questions/7401888/why-doesnt-left-bit-shift-for-32-bit-integers-work-as-expected-when-used
+      //參考:https://stackoverflow.com/questions/7401888/why-doesnt-left-bit-shift-for-32-bit-integers-work-as-expected-when-used
       r->sig[SIGSZ-1] = (image_hi <<31 <<1) | image_lo | SIG_MSB;
     }
 
