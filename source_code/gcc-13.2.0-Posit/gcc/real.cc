@@ -3226,7 +3226,7 @@ static void decode_posit32(const struct real_format *fmt , REAL_VALUE_TYPE *r , 
   fracLength= 28 - regLength;
   
   //get exp & fraction
-  int exp=0
+  int exp=0;
   
   //當fracLength<0,沒有fraction
   if(fracLength<0)
