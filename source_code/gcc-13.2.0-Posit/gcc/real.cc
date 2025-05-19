@@ -3346,8 +3346,16 @@ inline void posit64Reverse(unsigned long &image_hi,unsigned long &image_lo){
 }
 
 static void encode_posit64_2(const struct real_format *fmt , long *buf , const REAL_VALUE_TYPE *r){
-  //內容與encode_posit64相似,大部分不重覆寫註解
-  printf("encode_posit64_2_Test\n");
+  
+  //|------------------------------------------------------------|
+  //| 由於這邊內容與encode_posit64的概念是相同的                      |
+  //| 為確保註解內容同步,詳細註解請參考encode_posit64                  |
+  //|------------------------------------------------------------|
+  
+  //printf("encode_posit64_2_Test\n");
+  //  es=2:
+  //  regLength range[62,1]
+  //  fractionLength(fracLength) range [59,0]
 
   bool bitNPlusOne = false, bitsMore = false;
   
@@ -3355,8 +3363,6 @@ static void encode_posit64_2(const struct real_format *fmt , long *buf , const R
 
   int fracLength,exp;
 
-  //es =2 62>=regLength>=1 (63 >= regimeBits >=2bit) ,(59>=fractionLength>=0)
-  
   unsigned long sign = r->sign;
   
   unsigned long image_hi,reg_hi,exp_hi,frac_hi ,sig_hi;
@@ -3365,34 +3371,36 @@ static void encode_posit64_2(const struct real_format *fmt , long *buf , const R
   image_hi = 0x0;
   image_lo = 0x0;
 
-  //frac total 59 bits
-  //dubug: first bit is meaning of 1.F's 1. (in real_value is mean 0.5) so sig_hi +1 & 額外-1)
+  //64 or 32 bits
+  //抓r->sig並重新對齊
   if(HOST_BITS_PER_LONG == 64){ //27 + 32 = (3 + 24 + 32)
     sig_hi = r->sig[SIGSZ -1];
+    //  抓最大使用到的的bits數+1,lo 32 bits,hi 27+1 bits , 
+    //  (64-60+"1"):"+1"等效>>1,原因encode_posit64有提,這邊是貼近encode_ieee_double的寫法
     sig_lo = (sig_hi >> (64 - 60)) & 0xffffffff;
     sig_hi = (sig_hi >> (64-60+1) >> 31) & 0x7ffffff;
   }
-  else{ //(1+31 + 1+27) <=> 31 + 28 <=> 27 + (4 + 28)
+  else{ 
+    //(1+31 +28) =1+(31)+28 =1+(27+4)+28 =1+27+4+28 =(1+27)+(32)
     sig_hi = r->sig[SIGSZ-1];
     sig_lo = r->sig[SIGSZ-2];
     sig_lo = (sig_hi <<28) | (sig_lo>>4);
     sig_hi = (sig_hi >>4) & 0x7ffffff;
   }
 
-  //0x0123456701234567
   switch(r->cl){
     case rvc_zero: 
-      fprintf(stderr,"rvc_zero");
+      //fprintf(stderr,"rvc_zero");
       image_hi = 0x0;
       image_lo = 0x0;
       break;
     case rvc_inf: // to INF
-      fprintf(stderr,"rvc_inf");
+      //fprintf(stderr,"rvc_inf");
       image_hi = 0x80000000;
       image_lo = 0x00000000;
       break;
     case rvc_nan: // to INF
-      fprintf(stderr,"rvc_nan");      
+      //fprintf(stderr,"rvc_nan");      
       image_hi = 0x80000000;
       image_lo = 0x00000000;
       break;
@@ -3411,10 +3419,9 @@ static void encode_posit64_2(const struct real_format *fmt , long *buf , const R
         exp=REAL_EXP(r)-1;
       }
       
-      fprintf(stderr,"exp=%d\n",exp);
+      //fprintf(stderr,"exp=%d\n",exp);
 
       //exp極值 [-248,248] ((2^4)^62)
-      //0x0123456701234567
       if (exp >= 248 && sign == 0){
         image_hi = 0x7FFFFFFF;
         image_lo = 0xFFFFFFFF;// maxpos
@@ -3608,7 +3615,6 @@ static void encode_posit64_2(const struct real_format *fmt , long *buf , const R
 
 
         //all bits is 1 will create carry bit
-
         if(image_lo == 0xffffffff){
           image_hi += ( (bitNPlusOne & (image_lo & 1) ) | (bitNPlusOne & bitsMore) );
         }
@@ -4007,9 +4013,12 @@ else{
 }
 }
 
-static void decode_posit64_2(const struct real_format *fmt ,REAL_VALUE_TYPE *r , const long *buf){
-  printf("decode_posit64_2_Test\n");
+static void decode_posit64_2(const struct real_format *fmt ,REAL_VALUE_TYPE *r , const long *buf) {
 
+  //|------------------------------------------------------------|
+  //| 由於這邊內容與decode_posit64的概念是相同的                      |
+  //| 為確保註解內容同步,詳細註解請參考decode_posit64                  |
+  //|------------------------------------------------------------|
 
   unsigned long image_hi;
   unsigned long image_lo;
@@ -4024,12 +4033,12 @@ static void decode_posit64_2(const struct real_format *fmt ,REAL_VALUE_TYPE *r ,
     image_lo = buf[0], image_hi = buf[1];
   }
   
-  // 0x12345678 12345678
   image_hi &= 0xffffffff;
   image_lo &= 0xffffffff;
 
   bool sign = (image_hi >> 31) & 1;
-  //bits reverse for caculate
+  
+  //先轉為正數方便計算
   if(sign){
     posit64Reverse(image_hi,image_lo);
   }
@@ -4078,7 +4087,7 @@ static void decode_posit64_2(const struct real_format *fmt ,REAL_VALUE_TYPE *r ,
   //get exp
   int exp = 0;
   if(regLength <= 60){        
-    if(regLength<=28){ // 1 for regEndBit ,1 for signBit
+    if(regLength<=28){ //regLength"+2":+1 for regEndBit ,+1 for signBit
       exp = ((image_hi << (regLength + 2)) >> 29) & 0x3;
     }
     else if(regLength >=30){
@@ -4124,11 +4133,11 @@ static void decode_posit64_2(const struct real_format *fmt ,REAL_VALUE_TYPE *r ,
     }
 
     if(HOST_BITS_PER_LONG == 32){ 
-      r->sig[SIGSZ-1] = image_hi; //all 0
-      r->sig[SIGSZ-2] = image_lo; //all 0
+      r->sig[SIGSZ-1] = image_hi;
+      r->sig[SIGSZ-2] = image_lo;
     }
     else{
-      r->sig[SIGSZ-1] = ( image_hi <<31 <<1) | image_lo ; //all 0
+      r->sig[SIGSZ-1] = ( image_hi <<31 <<1) | image_lo;
     }
   }
   else if(regLength == 63 && regimeFirstBit == 0 && sign == 0){
