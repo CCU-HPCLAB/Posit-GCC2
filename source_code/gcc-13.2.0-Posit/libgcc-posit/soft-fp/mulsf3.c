@@ -28,7 +28,7 @@
 
 #include "SoftPosit-master/internals.h"
 #include "SoftPosit-master/platform.h"
-#include <stdio.h>
+//#include <stdio.h>
 
 SFtype
 __mulsf3 (SFtype a, SFtype b)
@@ -36,7 +36,7 @@ __mulsf3 (SFtype a, SFtype b)
   posit32_t r;
 
   r = p32_mul(*(posit32_t*)&a, *(posit32_t*)&b);
-  printf("mulsf3\n");
+  //printf("mulsf3\n");
   return *((SFtype*)&r);
 
 }

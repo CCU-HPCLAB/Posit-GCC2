@@ -28,13 +28,13 @@
 
 #include "SoftPosit-master/internals.h"
 #include "SoftPosit-master/platform.h"
-#include <stdio.h>
+//#include <stdio.h>
   
 SFtype __addsf3(SFtype a, SFtype b) {
   posit32_t r;
 
   r = p32_add(*((posit32_t*)&a),*((posit32_t*)&b));
-  printf("addsf3\n");
+  //printf("addsf3\n");
   return *((SFtype*)&r);
 }
   

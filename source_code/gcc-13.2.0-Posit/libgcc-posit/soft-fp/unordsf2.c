@@ -26,8 +26,10 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#include "cmpsf2.h"
-#include <stdio.h>
+//#include "cmpsf2.h"
+#include "SoftPosit-master/internals.h"
+#include "SoftPosit-master/platform.h"
+//#include <stdio.h>
 
 CMPtype
 __unordsf2 (SFtype a, SFtype b)

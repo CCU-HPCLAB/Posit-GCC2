@@ -27,7 +27,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include "cmpsf2.h"
-#include <stdio.h>
+#include "SoftPosit-master/internals.h"
+#include "SoftPosit-master/platform.h"
+//#include <stdio.h>
 
 //These functions return zero if neither argument is NaN, and a and b are equal.
 CMPtype 
@@ -36,7 +38,7 @@ __eqsf2 (SFtype a, SFtype b)
   CMPtype r;
 
   r=__cmpsf2(a,b);
-  printf("eqsf2\n");
+  //printf("eqsf2\n");
   return r;
 
 }

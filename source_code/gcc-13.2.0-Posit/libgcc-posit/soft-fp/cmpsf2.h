@@ -3,7 +3,7 @@
 
 #include "SoftPosit-master/internals.h"
 #include "SoftPosit-master/platform.h"
-#include <stdio.h>
+//#include <stdio.h>
 
 CMPtype __cmpsf2(SFtype a,SFtype b);
 

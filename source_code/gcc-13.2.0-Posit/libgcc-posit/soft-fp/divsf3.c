@@ -28,14 +28,14 @@
 
 #include "SoftPosit-master/internals.h"
 #include "SoftPosit-master/platform.h"
-#include <stdio.h>
+//#include <stdio.h>
    
 SFtype __divsf3 (SFtype a, SFtype b)
 {
   posit32_t r;
 
   r = p32_div(*(posit32_t*)&a, *(posit32_t*)&b);
-  printf("divsf3\n");
+  //printf("divsf3\n");
   return *((SFtype*)&r);
 
 }

@@ -28,7 +28,7 @@
 
 #include "SoftPosit-master/internals.h"
 #include "SoftPosit-master/platform.h"
-#include <stdio.h>
+//#include <stdio.h>
 
 SFtype
 __subsf3 (SFtype a, SFtype b)
@@ -36,7 +36,7 @@ __subsf3 (SFtype a, SFtype b)
   posit32_t r;
 
   r = p32_sub(*(posit32_t*)&a, *(posit32_t*)&b);
-  printf("subsf3\n");
+  //printf("subsf3\n");
   return *((SFtype*)&r);
 
 }

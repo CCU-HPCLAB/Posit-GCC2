@@ -28,13 +28,13 @@
 
 #include "SoftPosit-master/internals.h"
 #include "SoftPosit-master/platform.h"
-#include <stdio.h>
+//#include <stdio.h>
 
 SFtype
 __negsf2 (SFtype a)
 {
   unsigned long r=*((unsigned long*)&a);
   r=-r;
-  printf("negsf2\n");
+  //printf("negsf2\n");
   return *((SFtype*)&r);
 }
