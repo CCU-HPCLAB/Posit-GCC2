@@ -1100,7 +1100,7 @@ extern void riscv_remove_unneeded_save_restore_calls (void);
 /* modified for posit number */
 #undef LIBGCC_SPEC
 #define LIBGCC_SPEC \
-  "%{mposit:-lgcc_posit}" \
+  "%{mposit:-lgcc_posit -lsoftposit}" \
   "%{!mposit:-lgcc}"
 /* === by pschen === */
 

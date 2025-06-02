@@ -26,24 +26,15 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#include "soft-fp.h"
-#include "single.h"
+#include "SoftPosit-master/internals.h"
+#include "SoftPosit-master/platform.h"
+#include <stdio.h>
+  
+SFtype __addsf3(SFtype a, SFtype b) {
+  posit32_t r;
 
-SFtype
-__addsf3 (SFtype a, SFtype b)
-{
-  FP_DECL_EX;
-  FP_DECL_S (A);
-  FP_DECL_S (B);
-  FP_DECL_S (R);
-  SFtype r;
-
-  FP_INIT_ROUNDMODE;
-  FP_UNPACK_SEMIRAW_S (A, a);
-  FP_UNPACK_SEMIRAW_S (B, b);
-  FP_ADD_S (R, A, B);
-  FP_PACK_SEMIRAW_S (r, R);
-  FP_HANDLE_EXCEPTIONS;
-
-  return r;
+  r = p32_add(*((posit32_t*)&a),*((posit32_t*)&b));
+  printf("addsf3\n");
+  return *((SFtype*)&r);
 }
+  

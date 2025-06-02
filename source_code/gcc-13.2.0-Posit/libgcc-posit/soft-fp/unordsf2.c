@@ -26,22 +26,21 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#include "soft-fp.h"
-#include "single.h"
+#include "cmpsf2.h"
+#include <stdio.h>
 
 CMPtype
 __unordsf2 (SFtype a, SFtype b)
 {
-  FP_DECL_EX;
-  FP_DECL_S (A);
-  FP_DECL_S (B);
+  /*
   CMPtype r;
-
-  FP_INIT_EXCEPTIONS;
-  FP_UNPACK_RAW_S (A, a);
-  FP_UNPACK_RAW_S (B, b);
-  FP_CMP_UNORD_S (r, A, B, 1);
-  FP_HANDLE_EXCEPTIONS;
-
-  return r;
+  unsigned int ua=*((unsigned int*)&a),ub=*((unsigned int*)&b);
+  if(ua ==0x80000000 || ub ==0x80000000){
+    r=1;
+  }
+  else{
+    r=0;
+  }
+  */
+  return 0;
 }
