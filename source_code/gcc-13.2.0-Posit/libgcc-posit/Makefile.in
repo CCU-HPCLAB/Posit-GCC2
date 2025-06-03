@@ -133,6 +133,8 @@ installcheck:
 .PHONY: all clean
 
 clean:
+	#暴力的方法去清理libsoftposit.a
+	make "-C" $(libgcc_topdir)/libgcc-posit/soft-fp/softposit/SoftPosit-master/build/Linux-x86_64-GCC clean
 	-rm -f libgcc_tm.h libgcc.map
 	-rm -f libgcc_tm.stamp stmp-ldirs
 	-rm -f *$(objext)
@@ -940,6 +942,9 @@ libgcc_posit.a: $(libgcc-objects)
 libgcc_posit.a libgcov.a libunwind.a libgcc_eh.a:
 	-rm -f $@
 
+	#暴力的方法去建構libsoftposit.a
+	make "-C" $(libgcc_topdir)/libgcc-posit/soft-fp/SoftPosit-master/build/Linux-x86_64-GCC
+
 	objects="$(objects)";					\
 	if test -z "$$objects"; then				\
 	  echo 'int __libgcc_eh_dummy;' > eh_dummy.c;		\
@@ -1174,6 +1179,10 @@ $(libgcc-objects) $(libgcc-s-objects) $(libgcc-eh-objects) \
 #
 install-leaf: $(install-shared) $(install-libunwind)
 	$(mkinstalldirs) $(DESTDIR)$(inst_libdir)
+
+	$(INSTALL_DATA) $(libgcc_topdir)/libgcc-posit/soft-fp/SoftPosit-master/build/Linux-x86_64-GCC/libsoftposit.a $(DESTDIR)$(inst_libdir)/
+	chmod 644 $(DESTDIR)$(inst_libdir)/libsoftposit.a
+	$(RANLIB) $(DESTDIR)$(inst_libdir)/libsoftposit.a
 
 	$(INSTALL_DATA) libgcc_posit.a $(DESTDIR)$(inst_libdir)/
 	chmod 644 $(DESTDIR)$(inst_libdir)/libgcc_posit.a

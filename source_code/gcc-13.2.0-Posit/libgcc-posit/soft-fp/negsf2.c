@@ -26,19 +26,15 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#include "soft-fp.h"
-#include "single.h"
+#include "SoftPosit-master/internals.h"
+#include "SoftPosit-master/platform.h"
+//#include <stdio.h>
 
 SFtype
 __negsf2 (SFtype a)
 {
-  FP_DECL_S (A);
-  FP_DECL_S (R);
-  SFtype r;
-
-  FP_UNPACK_RAW_S (A, a);
-  FP_NEG_S (R, A);
-  FP_PACK_RAW_S (r, R);
-
-  return r;
+  unsigned long r=*((unsigned long*)&a);
+  r=-r;
+  //printf("negsf2\n");
+  return *((SFtype*)&r);
 }

@@ -26,24 +26,21 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#include "soft-fp.h"
-#include "single.h"
+#include "cmpsf2.h"
+#include "SoftPosit-master/internals.h"
+#include "SoftPosit-master/platform.h"
+//#include <stdio.h>
 
-CMPtype
+//These functions return zero if neither argument is NaN, and a and b are equal.
+CMPtype 
 __eqsf2 (SFtype a, SFtype b)
 {
-  FP_DECL_EX;
-  FP_DECL_S (A);
-  FP_DECL_S (B);
   CMPtype r;
 
-  FP_INIT_EXCEPTIONS;
-  FP_UNPACK_RAW_S (A, a);
-  FP_UNPACK_RAW_S (B, b);
-  FP_CMP_EQ_S (r, A, B, 1);
-  FP_HANDLE_EXCEPTIONS;
-
+  r=__cmpsf2(a,b);
+  //printf("eqsf2\n");
   return r;
+
 }
 
-strong_alias (__eqsf2, __nesf2);
+//strong_alias (__eqsf2, __nesf2);
